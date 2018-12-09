@@ -26,7 +26,6 @@ class NatronPlugin(DeadlinePlugin):
         self.RenderArgumentCallback += self.RenderArgument
         self.PreRenderTasksCallback += self.PreRenderTasks
         self.PostRenderTasksCallback += self.PostRenderTasks
-        self.CheckExitCodeCallback += self.CheckExitCode
     
     def Cleanup(self):
         for stdoutHandler in self.StdoutHandlers:
@@ -37,7 +36,6 @@ class NatronPlugin(DeadlinePlugin):
         del self.RenderArgumentCallback
         del self.PreRenderTasksCallback
         del self.PostRenderTasksCallback
-        del self.CheckExitCodeCallback
 
     ## Called by Deadline to initialize the process.
     def InitializeProcess(self):
@@ -51,10 +49,43 @@ class NatronPlugin(DeadlinePlugin):
         self.AddStdoutHandlerCallback(".*Rendering finished.*").HandleCallback += self.HandleStdoutCompleted
         self.AddStdoutHandlerCallback(".*ERROR:.*").HandleCallback += self.HandleStdoutError
 
-    def RenderExecutable( self ):
-        #Use NATRON_LOCATION set by Ecosystem
-        currentJob = self.GetJob()
-        executable = currentJob.GetJobEnvironmentKeyValue('NATRON_LOCATION') + '/bin/NatronRenderer.exe'
+    def RenderExecutable(self):
+        # Get the version we're rendering with.
+        self.Version = float( self.GetPluginInfoEntry( "Version" ) )
+        build = self.GetPluginInfoEntryWithDefault( "Build", "None" ).lower()
+
+        # We support minor versions, so we should default to the *.0 version if the *.x version they're using isn't supported yet.
+        versionNotSupported = "this version is not supported yet"
+        natronExeList = self.GetConfigEntryWithDefault( "RenderExecutable" + str(self.Version).replace( ".", "_" ), versionNotSupported )
+        if natronExeList == versionNotSupported:
+            oldVersion = self.Version
+            self.Version = float(int(self.Version))
+
+            natronExeList = self.GetConfigEntryWithDefault( "RenderExecutable" + str(self.Version).replace( ".", "_" ), versionNotSupported )
+            if natronExeList == versionNotSupported:
+                self.FailRender( "Natron major version " + str(int(self.Version)) + " is currently not supported." )
+            else:
+                self.LogWarning( "Natron minor version " + str(oldVersion) + " is currently not supported, so version " + str(self.Version) + " will be used instead." )
+        
+        executable = ""
+        if(SystemUtils.IsRunningOnWindows()):
+            if( build == "32bit" ):
+                self.LogInfo( "Enforcing 32 bit build of Natron" )
+                executable = FileUtils.SearchFileListFor32Bit( natronExeList )
+                if( executable == "" ):
+                    self.LogWarning( "32 bit Natron render executable was not found in the semicolon separated list \"" + natronExeList + "\". Checking for any executable that exists instead." )        
+            elif( build == "64bit" ):
+                self.LogInfo( "Enforcing 64 bit build of Natron" )
+                executable = FileUtils.SearchFileListFor64Bit( natronExeList )
+                if( executable == "" ):
+                    self.LogWarning( "64 bit Natron render executable was not found in the semicolon separated list \"" + natronExeList + "\". Checking for any executable that exists instead." )
+            
+        if( executable == "" ):
+            self.LogInfo( "Not enforcing a build of Natron" )
+            executable = FileUtils.SearchFileList( natronExeList )
+            if executable == "":
+                self.FailRender( "Natron render executable was not found in the semicolon separated list \"" + natronExeList + "\". The path to the render executable can be configured from the Plugin Configuration in the Deadline Monitor." )
+
         return executable
 
     def RenderArgument(self):
@@ -130,14 +161,6 @@ class NatronPlugin(DeadlinePlugin):
         self.SetProgress( 100.0 )       
 
     def HandleStdoutError(self):
-        #if exitCode != -1073740940: 
-        self.SetStatusMessage( "Ignoreing errors" )
-        #self.SetProgress( 0.0 )
-        #self.FailRender( self.GetRegexMatch(0) )
-
-    def CheckExitCode( self, exitCode ):
-        if exitCode != 0:
-            if exitCode == -1073740940:
-                self.LogInfo( "Ignoring exit code -1073740940" )
-            else:
-                self.FailRender( "Renderer returned non-zero error code %d." % exitCode )
+        self.SetStatusMessage( "" )
+        self.SetProgress( 0.0 )
+        self.FailRender( self.GetRegexMatch(0) )

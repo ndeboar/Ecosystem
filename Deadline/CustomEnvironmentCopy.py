@@ -38,7 +38,10 @@ class CustomEnvironmentCopyListener (DeadlineEventListener):
     def OnJobSubmitted(self, job):
         #stupid hardcoded stuff, will fix soon
         if 'HOUDINI_VERSION' in os.environ: #houdini
-            tools = ['houdini%s'%os.environ['HOUDINI_VERSION'], 'htoa%s'%os.environ['HTOA_VERSION']]
+            if "HTOA" in os.environ:
+                tools = ['houdini%s'%os.environ['HOUDINI_VERSION'], 'htoa%s'%os.environ['HTOA_VERSION']]
+            if "REDSHIFT_VERSION" in os.environ:
+                tools = ['houdini%s'%os.environ['HOUDINI_VERSION'], 'redshift%s'%os.environ['REDSHIFT_VERSION']]
         if 'NATRON_VERSION' in os.environ: #natron
             tools = ['natron%s'%os.environ['NATRON_VERSION']]
         self.LogInfo("Ecosystem Tools: %s"%tools)

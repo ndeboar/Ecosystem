@@ -5,7 +5,11 @@ from System.IO import *
 from Deadline.Plugins import *
 from Deadline.Scripting import *
 
-import socket, traceback
+import io
+import os
+import re
+import socket
+import traceback
 
 def GetDeadlinePlugin():
     return HoudiniPlugin()
@@ -244,6 +248,8 @@ class HoudiniPlugin (DeadlinePlugin):
             
         if self.GetBooleanConfigEntryWithDefault( "EnablePathMapping", True ):
             mappings = RepositoryUtils.GetPathMappings( )
+            #Remove Mappings with no to path.
+            mappings = [ mappingPair for mappingPair in mappings if mappingPair[1] ]
             if len(mappings) >0:
                 houdiniPathmap = ""
                 if Environment.GetEnvironmentVariable( "HOUDINI_PATHMAP" ) != None:
@@ -275,6 +281,8 @@ class HoudiniPlugin (DeadlinePlugin):
                 
                 self.LogInfo("Set HOUDINI_PATHMAP to " + houdiniPathmap )
                 self.SetProcessEnvironmentVariable( 'HOUDINI_PATHMAP', houdiniPathmap )
+                
+                self.SetRedshiftPathmappingEnv( mappings )
         
         if self.GetBooleanPluginInfoEntryWithDefault( "SimJob", False ) and self.GetBooleanPluginInfoEntryWithDefault( "SimRequiresTracking", True ) and self.GetCurrentTaskId() == "0":
             self.LogInfo( "Sim Job: Starting Sim Tracker process because this is the first task for this sim job" )
@@ -408,4 +416,37 @@ class HoudiniPlugin (DeadlinePlugin):
         
     def SetRopType(self):
         self.ropType = self.GetRegexMatch(1)
-           
+               
+    def SetRedshiftPathmappingEnv( self, mappings ):
+        try:
+            if not mappings:
+                return
+
+            self.LogInfo( "Redshift Path Mapping..." )
+
+            # "C:\MyTextures\" "\\MYSERVER01\Textures\" ...
+            redshiftMappingRE = re.compile( r"\"([^\"]*)\"\s+\"([^\"]*)\"" )
+
+            oldRSMappingFileName = Environment.GetEnvironmentVariable( "REDSHIFT_PATHOVERRIDE_FILE" )
+            if oldRSMappingFileName:
+                self.LogInfo( '[REDSHIFT_PATHOVERRIDE_FILE]="%s"' % oldRSMappingFileName )
+                with io.open( oldRSMappingFileName, mode="r", encoding="utf-8" ) as oldRSMappingFile:
+                    for line in oldRSMappingFile:
+                        mappings.extend( redshiftMappingRE.findall( line ) )
+            
+            oldRSMappingString = Environment.GetEnvironmentVariable( "REDSHIFT_PATHOVERRIDE_STRING" )
+            if oldRSMappingString:
+                self.LogInfo( '[REDSHIFT_PATHOVERRIDE_STRING]="%s"' % oldRSMappingString )
+                mappings.extend( redshiftMappingRE.findall( oldRSMappingString ) )
+            
+            newRSMappingFileName = os.path.join( self.CreateTempDirectory("RSMapping"), "RSMapping.txt" )
+            with io.open( newRSMappingFileName, mode="w", encoding="utf-8" ) as newRSMappingFile:
+                for mappingPair in mappings:
+                    self.LogInfo( u'source: "%s" dest: "%s"' % (mappingPair[0], mappingPair[1] ))
+                    newRSMappingFile.write( u'"%s" "%s"\n' % (mappingPair[0], mappingPair[1] ))
+            
+            self.LogInfo( '[REDSHIFT_PATHOVERRIDE_FILE] now set to: "%s"' % newRSMappingFileName )
+            self.SetProcessEnvironmentVariable( "REDSHIFT_PATHOVERRIDE_FILE", newRSMappingFileName )
+        except:
+            self.LogWarning( "Failed to set Redshift Pathmapping Environment variable." )
+            self.LogWarning( traceback.format_exc())
