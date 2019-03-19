@@ -1,1 +1,1 @@
-C:\Windows\System32\cmd.exe /c "set PATH=D:\Documents\crap\avalon-setup;C:\Program Files\MongoDB\Server\3.4\bin;C:\Program Files\Git\cmd;C:\Python36\Scripts;C:\Python36\; && start cmd.exe"
+C:\Windows\System32\cmd.exe /c "set PATH=D:\Documents\crap\avalon-setup;C:\Program Files\MongoDB\Server\3.4\bin;C:\Program Files\Git\cmd;C:\Python37\Scripts;C:\Python37\;C:\Python27\Scripts;C:\Program Files\Side Effects Software\Houdini 17.0.416\bin; && start cmd.exe"
